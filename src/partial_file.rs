@@ -1,3 +1,4 @@
+use std::cmp;
 use std::fs::File;
 use iron::headers::{ByteRangeSpec, ContentLength, ContentRange, ContentRangeSpec};
 use iron::response::{WriteBody, Response};
@@ -33,12 +34,10 @@ impl PartialFile {
         }
     }
 
-    /// Panics if the file doesn't exist
-    pub fn from_path<P: AsRef<Path>, Range>(path: P, range: Range) -> PartialFile
+    pub fn from_path<P: AsRef<Path>, Range>(path: P, range: Range) -> Result<PartialFile, io::Error>
     where Range: Into<PartialFileRange> {
-        let file = File::open(path.as_ref())
-            .expect(&format!("No such file: {}", path.as_ref().display()));
-        Self::new(file, range)
+        let file = File::open(path.as_ref())?;
+        Ok(Self::new(file, range))
     }
 }
 
@@ -73,8 +72,8 @@ impl Modifier<Response> for PartialFile {
         let file_length : Option<u64> = metadata.map(|m| m.len());
         let range : Option<(u64, u64)> = match (self.range, file_length) {
             (FromTo(from, to), Some(file_length)) => {
-                if from <= to && to < file_length {
-                    Some((from, to))
+                if from <= to && from < file_length {
+                    Some((from, cmp::min(to, file_length - 1)))
                 } else {
                     None
                 }
